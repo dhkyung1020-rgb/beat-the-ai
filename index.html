@@ -131,6 +131,34 @@ thead th{font-size:.78rem;color:var(--muted);letter-spacing:.06em;font-weight:50
 td.h{color:var(--human);font-weight:700} td.a{color:var(--ai);font-weight:700}
 .tablewrap{overflow-x:auto}
 .foot-note{font-size:.85rem;color:var(--muted);margin:0;max-width:30ch}
+/* Booth records popup */
+.records{position:fixed;z-index:40;left:50%;top:50%;transform:translate(-50%,-50%);width:min(calc(100vw - 32px),680px);max-height:calc(100vh - 32px);overflow-y:auto;box-shadow:0 24px 70px rgb(10 14 30 / .3)}
+
+/* One-screen layout on laptops and tablets in landscape */
+@media (min-width:781px){
+  html,body{height:100%;overflow:hidden}
+  .wrap{max-width:1320px;height:100vh;height:100dvh;padding-block:14px;gap:12px}
+  header h1{font-size:clamp(1.9rem,4.2vh,2.6rem)}
+  .sub{font-size:.9rem;margin-top:2px}
+  .tab{padding:8px 14px}
+  .tab .nm{font-size:1.15rem}
+  .stage{flex:1;min-height:0;align-items:stretch}
+  .stage>.card{min-height:0;overflow:hidden;gap:10px;padding:16px 18px}
+  .card h2{font-size:1.35rem}
+  .rule{font-size:.9rem;line-height:1.45}
+  .score .n{font-size:clamp(1.8rem,4.5vh,2.6rem)}
+  .status{font-size:1rem}
+  .pad{flex:1;min-height:120px}
+  .arena{flex:1;height:auto;min-height:180px}
+  .stroop{flex:1;min-height:100px}
+  .word{font-size:min(14vw,11vh)}
+  .ans{padding:clamp(8px,1.6vh,16px) 6px}
+  .time{padding:6px 14px}
+  .time .v{font-size:1.25rem}
+  .brain .log{max-height:none;flex:1;min-height:0}
+  .btn{padding:8px 16px}
+}
+
 /* Robot taunt scene */
 .scene{position:fixed;inset:0;z-index:50;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:calc(env(safe-area-inset-top,0px) + 48px) 16px calc(env(safe-area-inset-bottom,0px) + 24px);background:color-mix(in srgb,var(--bg) 94%,transparent);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);cursor:pointer;text-align:center;animation:fadein .25s ease-out;overflow-y:auto}
 @keyframes fadein{from{opacity:0}}
@@ -181,7 +209,7 @@ td.h{color:var(--human);font-weight:700} td.a{color:var(--ai);font-weight:700}
       <h1><span class="me">인간</span> <span class="vs">vs</span> AI<small>SPEED</small></h1>
       <p class="sub">생각할 틈은 없어요. 손이 빠른 쪽이 이깁니다. 한 판에 30초면 끝나요.</p>
     </div>
-    <div class="row"><div class="legend"><span><i class="dot" style="background:var(--human)"></i>도전자</span><span><i class="dot" style="background:var(--ai)"></i>AI</span></div><button class="btn" id="newbie">새 도전자</button></div>
+    <div class="row"><div class="legend"><span><i class="dot" style="background:var(--human)"></i>도전자</span><span><i class="dot" style="background:var(--ai)"></i>AI</span></div><button class="btn" id="rec-open">부스 기록</button><button class="btn" id="newbie">새 도전자</button></div>
   </header>
 
   <nav class="tabs" role="tablist" aria-label="단계 선택">
@@ -261,7 +289,8 @@ td.h{color:var(--human);font-weight:700} td.a{color:var(--ai);font-weight:700}
     </aside>
   </section>
 
-  <section class="card">
+  <section class="card records" id="records" role="dialog" aria-label="부스 기록" hidden>
+    <div class="row" style="justify-content:space-between"><h2>부스 기록</h2><button class="btn" id="rec-close">닫기</button></div>
     <div class="board-foot">
       <div class="tablewrap">
         <table>
@@ -478,6 +507,8 @@ document.addEventListener('keydown',e=>{
 function stopAll(){if(A.phase==='wait'||A.phase==='go'){aClear();A.phase='idle';if(!A.over){A.round=Math.max(0,A.round-1);aScore();padSet('','시작','눌러서 시작')}}
   if(B.live)bStop();if(C.live)cStop()}
 $('#newbie').onclick=newChallenger;
+$('#rec-open').onclick=()=>{$('#records').hidden=!$('#records').hidden};
+$('#rec-close').onclick=()=>{$('#records').hidden=true};
 newChallenger();
 })();
 </script>
