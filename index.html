@@ -1,0 +1,485 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AI를 이겨라 스피드</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=IBM+Plex+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: booth console — stage strip, play field on the left, AI reaction log on the right, booth scoreboard at the bottom */
+:root{
+  --bg:#E9EDF4; --panel:#FFFFFF; --panel-2:#F3F5FA; --ink:#141A2E; --muted:#5B6480; --line:#D3D9E6;
+  --human:#E5484D; --human-soft:#FBE3E4; --ai:#3E4BDB; --ai-soft:#E3E6FB; --go:#17A35E; --wait:#C9D0DF;
+  --c-red:#E03A3E; --c-blue:#2F6BFF; --c-green:#16A05A; --c-yellow:#E0A800; --visor:#0B1030; --eye:#5CF2FF;
+  --f-display:"Black Han Sans","IBM Plex Sans KR",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans KR",system-ui,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+  --r:14px;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0E1322; --panel:#171E33; --panel-2:#1E2640; --ink:#E8ECF7; --muted:#97A0BD; --line:#2C3656;
+  --human:#FF6B6F; --human-soft:#3A2030; --ai:#8391FF; --ai-soft:#232B55; --go:#2FC57A; --wait:#2C3656;
+  --c-red:#FF5C60; --c-blue:#5B8BFF; --c-green:#34C77B; --c-yellow:#F5C542; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0E1322; --panel:#171E33; --panel-2:#1E2640; --ink:#E8ECF7; --muted:#97A0BD; --line:#2C3656;
+  --human:#FF6B6F; --human-soft:#3A2030; --ai:#8391FF; --ai-soft:#232B55; --go:#2FC57A; --wait:#2C3656;
+  --c-red:#FF5C60; --c-blue:#5B8BFF; --c-green:#34C77B; --c-yellow:#F5C542; color-scheme:dark}
+html,body{background:var(--bg);color:var(--ink)}
+body{font-family:var(--f-body);font-size:16px;line-height:1.55}
+.wrap{max-width:1060px;margin:0 auto;padding-inline:16px;padding-block:24px 48px;display:flex;flex-direction:column;gap:20px}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px}
+h1{font-family:var(--f-display);font-weight:400;font-size:clamp(2.4rem,7vw,3.8rem);line-height:1;margin:0}
+h1 .vs{color:var(--ai)} h1 .me{color:var(--human)} h1 small{font-size:.45em;color:var(--muted);margin-left:.3em;letter-spacing:.06em}
+.sub{margin:6px 0 0;color:var(--muted);max-width:46ch}
+.legend{display:flex;gap:14px;font-size:.9rem;color:var(--muted)}
+.dot{display:inline-block;width:12px;height:12px;border-radius:50%;vertical-align:-1px;margin-right:6px}
+
+.tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.tab{font:inherit;color:var(--ink);background:var(--panel);border:2px solid var(--line);border-radius:var(--r);padding:12px 14px;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:2px;min-width:0}
+.tab:hover{border-color:var(--ai)}
+button:focus-visible{outline:3px solid var(--ai);outline-offset:2px}
+.tab[aria-selected="true"]{border-color:var(--ink);background:var(--ink);color:var(--bg)}
+.tab .lv{font-family:var(--f-mono);font-size:.75rem;letter-spacing:.08em;text-transform:uppercase;opacity:.75}
+.tab .nm{font-family:var(--f-display);font-size:1.3rem;line-height:1.15}
+.tab .meta{font-size:.82rem;opacity:.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+.stage{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:780px){.stage{grid-template-columns:1fr}.tab .meta{display:none}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:20px;display:flex;flex-direction:column;gap:16px;min-width:0}
+.card h2{font-family:var(--f-display);font-weight:400;font-size:1.6rem;margin:0;line-height:1.2}
+.rule{margin:0;color:var(--muted);font-size:.95rem}
+.status{font-weight:700;font-size:1.1rem;min-height:1.6em}
+.status.win{color:var(--human)} .status.lose{color:var(--ai)}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.btn{font:inherit;font-weight:700;border-radius:999px;padding:10px 18px;border:2px solid var(--ink);background:transparent;color:var(--ink);cursor:pointer}
+.btn.primary{background:var(--human);border-color:var(--human);color:#fff}
+.btn:disabled{opacity:.4;cursor:default}
+
+.score{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;text-align:center}
+.score .who{font-size:.85rem;color:var(--muted)}
+.score .n{font-family:var(--f-display);font-size:2.6rem;line-height:1;font-variant-numeric:tabular-nums}
+.score .me .n{color:var(--human)} .score .ai .n{color:var(--ai)}
+.score .mid{font-family:var(--f-mono);font-size:.8rem;color:var(--muted)}
+
+/* AI panel */
+.brain{background:var(--panel-2)}
+.brain-head{display:flex;align-items:center;gap:12px}
+.face{width:52px;height:52px;border-radius:14px;background:var(--ai);position:relative;flex:none}
+.face::before,.face::after{content:"";position:absolute;top:18px;width:9px;height:9px;border-radius:50%;background:var(--panel);transition:height .15s}
+.face::before{left:13px}.face::after{right:13px}
+.face i{position:absolute;left:15px;right:15px;bottom:11px;height:4px;border-radius:2px;background:var(--panel);transition:all .2s}
+.face.think::before,.face.think::after{height:3px;top:21px}
+.face.happy i{height:9px;border-radius:0 0 10px 10px}
+.face.sad i{height:8px;border-radius:10px 10px 0 0;bottom:8px}
+.brain h3{margin:0;font-size:1rem}
+.brain .mood{margin:0;font-size:.85rem;color:var(--muted)}
+.log{list-style:none;margin:0;padding:0;font-family:var(--f-mono);font-size:.84rem;display:flex;flex-direction:column;gap:6px;max-height:300px;overflow-y:auto}
+.log li{padding:8px 10px;border-radius:8px;background:var(--panel);border-left:3px solid var(--line);overflow-wrap:anywhere}
+.log li.ai{border-left-color:var(--ai)} .log li.me{border-left-color:var(--human)} .log li.oops{border-left-color:#E0A21B}
+.learn{margin:0;font-size:.88rem;color:var(--muted);border-top:1px dashed var(--line);padding-top:12px}
+.learn b{color:var(--ink)}
+
+/* Stage 1: reaction pad */
+.pad{font:inherit;border:none;border-radius:16px;min-height:260px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:pointer;background:var(--panel-2);color:var(--ink);user-select:none;-webkit-user-select:none;touch-action:manipulation;padding:20px;text-align:center}
+.pad .big{font-family:var(--f-display);font-size:clamp(2.2rem,8vw,3.6rem);line-height:1.1}
+.pad .small{font-size:.95rem;opacity:.85}
+.pad.wait{background:var(--wait)}
+.pad.go{background:var(--go);color:#fff}
+.pad.foul{background:#E0A21B;color:#1a1300}
+.times{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.time{background:var(--panel-2);border-radius:12px;padding:10px 14px}
+.time .who{font-size:.8rem;color:var(--muted)}
+.time .v{font-family:var(--f-mono);font-size:1.5rem;font-variant-numeric:tabular-nums}
+.time.me .v{color:var(--human)} .time.ai .v{color:var(--ai)}
+
+/* Stage 2: target arena */
+.arena{position:relative;height:340px;border-radius:16px;background:var(--panel-2);overflow:hidden;touch-action:manipulation;user-select:none;-webkit-user-select:none}
+.arena .msg{position:absolute;inset:0;display:grid;place-items:center;text-align:center;font-family:var(--f-display);font-size:1.6rem;color:var(--muted);pointer-events:none;padding:16px}
+.target{position:absolute;width:64px;height:64px;margin:-32px 0 0 -32px;border-radius:50%;border:none;cursor:pointer;padding:0;
+  background:radial-gradient(circle,var(--human) 0 22%,var(--panel) 23% 40%,var(--human) 41% 60%,var(--panel) 61% 76%,var(--human) 77%);animation:appear .12s ease-out}
+@keyframes appear{from{transform:scale(.3)}}
+.target.taken{opacity:.25}
+.cursor{position:absolute;left:0;top:0;width:26px;height:26px;margin:-4px 0 0 -4px;pointer-events:none;transition-property:transform;transition-timing-function:cubic-bezier(.3,.1,.3,1)}
+.cursor svg{width:100%;height:100%;display:block}
+.pop{position:absolute;font-family:var(--f-display);font-size:1.2rem;pointer-events:none;animation:rise .7s ease-out forwards;transform:translate(-50%,-50%)}
+@keyframes rise{to{opacity:0;margin-top:-30px}}
+
+/* Stage 3: color trap */
+.stroop{border-radius:16px;background:var(--panel-2);min-height:200px;display:grid;place-items:center;text-align:center;padding:16px}
+.word{font-family:var(--f-display);font-size:clamp(3.4rem,14vw,5.5rem);line-height:1}
+.word.idle{font-size:1.6rem;color:var(--muted)}
+.qbar{height:6px;border-radius:3px;background:var(--line);overflow:hidden}
+.qbar i{display:block;height:100%;width:0;background:var(--ai)}
+.answers{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+@media (max-width:420px){.answers{grid-template-columns:repeat(2,1fr)}}
+.ans{font:inherit;font-weight:700;font-size:1.15rem;border:2px solid var(--line);border-radius:12px;background:var(--panel);color:var(--ink);padding:16px 6px;cursor:pointer;touch-action:manipulation}
+.ans kbd{display:block;font-family:var(--f-mono);font-size:.7rem;color:var(--muted);font-weight:400}
+.ans:hover:not(:disabled){border-color:var(--ink)}
+.ans:disabled{opacity:.5;cursor:default}
+.ans.right{border-color:var(--go);background:color-mix(in srgb,var(--go) 18%,var(--panel))}
+.ans.wrong{border-color:var(--human);background:var(--human-soft)}
+
+/* Booth scoreboard */
+.board-foot{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px;align-items:center}
+@media (max-width:640px){.board-foot{grid-template-columns:1fr}}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th,td{padding:8px 10px;text-align:right;border-bottom:1px solid var(--line)}
+th:first-child,td:first-child{text-align:left}
+thead th{font-size:.78rem;color:var(--muted);letter-spacing:.06em;font-weight:500}
+td.h{color:var(--human);font-weight:700} td.a{color:var(--ai);font-weight:700}
+.tablewrap{overflow-x:auto}
+.foot-note{font-size:.85rem;color:var(--muted);margin:0;max-width:30ch}
+/* Robot taunt scene */
+.scene{position:fixed;inset:0;z-index:50;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:calc(env(safe-area-inset-top,0px) + 48px) 16px calc(env(safe-area-inset-bottom,0px) + 24px);background:color-mix(in srgb,var(--bg) 94%,transparent);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);cursor:pointer;text-align:center;animation:fadein .25s ease-out;overflow-y:auto}
+@keyframes fadein{from{opacity:0}}
+.scene-tag{font-family:var(--f-mono);font-size:.8rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);min-height:1.2em}
+.robot{width:min(52vw,230px);height:auto;overflow:visible;animation:hover 2.6s ease-in-out infinite}
+@keyframes hover{50%{transform:translateY(-8px)}}
+.robot .bulb{animation:blink 1.1s steps(2,jump-none) infinite}
+@keyframes blink{50%{opacity:.25}}
+.robot .eye,.robot .brow,.robot .mouth,.robot .arm{transform-box:fill-box;transform-origin:center;transition:transform .25s,fill .25s,opacity .25s}
+.robot .arm{transform-origin:50% 8%}
+.robot .brow{opacity:0}
+.robot.smug .eye{transform:scaleY(.3)}
+.robot.smug .brow{opacity:1}
+.robot.smug .brow.l{transform:translateY(-5px) rotate(-12deg)}
+.robot.smug .brow.r{transform:rotate(6deg)}
+.robot.smug .arm{animation:wag .45s ease-in-out infinite alternate}
+@keyframes wag{from{transform:rotate(-150deg)}to{transform:rotate(-125deg)}}
+.robot.angry .brow{opacity:1}
+.robot.angry .brow.l{transform:rotate(22deg)}
+.robot.angry .brow.r{transform:rotate(-22deg)}
+.robot.angry .eye{fill:var(--human)}
+.robot.angry .arm{transform:rotate(-70deg)}
+.robot.shock .eye{transform:scale(1.4)}
+.robot.shock .mouth{transform:scale(.45,2.8)}
+.robot.sad .brow{opacity:1}
+.robot.sad .brow.l{transform:rotate(-20deg)}
+.robot.sad .brow.r{transform:rotate(20deg)}
+.robot.sad .eye{transform:translateY(5px) scaleY(.7);fill:var(--muted)}
+.robot.sad{animation-duration:5s}
+.robot.talk .mouth{animation:talk .14s ease-in-out infinite alternate}
+@keyframes talk{to{transform:scaleY(2.8)}}
+.bubble{position:relative;max-width:560px;width:100%;background:var(--panel);color:var(--ink);border:2px solid var(--ink);border-radius:18px;padding:22px 20px 18px;font-size:clamp(1.05rem,3.6vw,1.35rem);font-weight:700;line-height:1.5;min-height:5.4em;display:flex;align-items:center;justify-content:center;text-wrap:balance}
+.bubble::before{content:"";position:absolute;top:-12px;left:50%;width:20px;height:20px;margin-left:-10px;background:var(--panel);border-left:2px solid var(--ink);border-top:2px solid var(--ink);transform:rotate(45deg)}
+.bubble .who{position:absolute;top:-12px;left:16px;font-family:var(--f-mono);font-size:.72rem;font-weight:500;background:var(--ai);color:#fff;padding:2px 10px;border-radius:999px;letter-spacing:.1em}
+.scene-actions{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;min-height:52px;align-items:center}
+.scene-hint{font-size:.9rem;color:var(--muted);animation:nudge 1.2s ease-in-out infinite}
+@keyframes nudge{50%{opacity:.4}}
+.scene .btn.primary{font-size:1.15rem;padding:12px 30px}
+.scene-skip{position:absolute;top:calc(env(safe-area-inset-top,0px) + 10px);right:12px;font:inherit;font-size:.85rem;background:none;border:none;color:var(--muted);cursor:pointer;padding:8px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}}
+</style>
+<style>*,*::before,*::after{box-sizing:border-box}body{margin:0}[hidden]{display:none!important}</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1><span class="me">인간</span> <span class="vs">vs</span> AI<small>SPEED</small></h1>
+      <p class="sub">생각할 틈은 없어요. 손이 빠른 쪽이 이깁니다. 한 판에 30초면 끝나요.</p>
+    </div>
+    <div class="row"><div class="legend"><span><i class="dot" style="background:var(--human)"></i>도전자</span><span><i class="dot" style="background:var(--ai)"></i>AI</span></div><button class="btn" id="newbie">새 도전자</button></div>
+  </header>
+
+  <nav class="tabs" role="tablist" aria-label="단계 선택">
+    <button class="tab" role="tab" id="tab1" data-stage="1" aria-selected="true"><span class="lv">Stage 1 · 쉬움</span><span class="nm">반응속도</span><span class="meta" id="m1">AI 반응 0.33~0.45초</span></button>
+    <button class="tab" role="tab" id="tab2" data-stage="2" aria-selected="false"><span class="lv">Stage 2 · 중간</span><span class="nm">표적 사냥</span><span class="meta" id="m2">AI 커서와 터치 경쟁</span></button>
+    <button class="tab" role="tab" id="tab3" data-stage="3" aria-selected="false"><span class="lv">Stage 3 · 어려움</span><span class="nm">색깔 함정</span><span class="meta" id="m3">글자에 속지 마세요</span></button>
+  </nav>
+
+  <!-- STAGE 1 -->
+  <section class="stage" id="s1" role="tabpanel" aria-labelledby="tab1">
+    <div class="card">
+      <h2>반응속도 대결</h2>
+      <p class="rule">화면이 <b style="color:var(--go)">초록색</b>으로 바뀌는 순간 누르세요. AI보다 빨리 누르면 1점, 먼저 누르면 부정출발로 AI 1점. <b>2점 먼저</b> 따면 승리. 스페이스바도 돼요.</p>
+      <div class="score">
+        <div class="me"><div class="who">도전자</div><div class="n" id="a-me">0</div></div>
+        <div class="mid" id="a-round">3판 2선승</div>
+        <div class="ai"><div class="who">AI</div><div class="n" id="a-ai">0</div></div>
+      </div>
+      <button class="pad" id="pad"><span class="big">시작</span><span class="small">눌러서 시작</span></button>
+      <div class="times">
+        <div class="time me"><div class="who">내 반응</div><div class="v" id="t-me">–</div></div>
+        <div class="time ai"><div class="who">AI 반응</div><div class="v" id="t-ai">–</div></div>
+      </div>
+      <div class="row"><button class="btn" id="a-reset">처음부터</button><button class="btn primary" id="a-next" hidden>Stage 2 도전 →</button></div>
+    </div>
+    <aside class="card brain">
+      <div class="brain-head"><div class="face" id="f1"><i></i></div><div><h3>ZERO의 반응 기록</h3><p class="mood" id="mood1">신호 대기 중</p></div></div>
+      <ul class="log" id="log1"></ul>
+      <p class="learn"><b>알고 계셨나요?</b> 사람의 평균 반응속도는 약 0.25초예요. 이 AI는 일부러 0.33~0.45초로 늦춰 두었어요. 집중만 하면 이길 수 있어요.</p>
+    </aside>
+  </section>
+
+  <!-- STAGE 2 -->
+  <section class="stage" id="s2" role="tabpanel" aria-labelledby="tab2" hidden>
+    <div class="card">
+      <h2>표적 사냥</h2>
+      <p class="rule">표적이 나타나면 AI 커서가 날아갑니다. 커서보다 먼저 표적을 터치하세요. 표적 <b>10개</b> 중 더 많이 잡은 쪽이 승리.</p>
+      <div class="score">
+        <div class="me"><div class="who">도전자</div><div class="n" id="b-me">0</div></div>
+        <div class="mid" id="b-round">0 / 10</div>
+        <div class="ai"><div class="who">AI</div><div class="n" id="b-ai">0</div></div>
+      </div>
+      <div class="arena" id="arena">
+        <div class="msg" id="b-msg">아래 버튼을 눌러 시작</div>
+        <div class="cursor" id="cursor"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 2 L20 12 L12 13.5 L8 21 Z" fill="var(--ai)" stroke="var(--panel)" stroke-width="1.6" stroke-linejoin="round"/></svg></div>
+      </div>
+      <div class="status" id="b-status"></div>
+      <div class="row"><button class="btn primary" id="b-start">시작</button><button class="btn primary" id="b-next" hidden>Stage 3 도전 →</button></div>
+    </div>
+    <aside class="card brain">
+      <div class="brain-head"><div class="face" id="f2"><i></i></div><div><h3>ZERO의 반응 기록</h3><p class="mood" id="mood2">표적 탐색 대기</p></div></div>
+      <ul class="log" id="log2"></ul>
+      <p class="learn"><b>이 AI의 원리:</b> 화면에서 표적 위치를 찾고(인식), 커서를 그곳까지 움직여요(동작). 사람도 똑같이 "보고 → 손 뻗기"를 하는데, 누가 더 빠를까요?</p>
+    </aside>
+  </section>
+
+  <!-- STAGE 3 -->
+  <section class="stage" id="s3" role="tabpanel" aria-labelledby="tab3" hidden>
+    <div class="card">
+      <h2>색깔 함정</h2>
+      <p class="rule">글자가 <b>무슨 뜻인지</b>가 아니라 <b>무슨 색으로 쓰였는지</b>를 고르세요. AI보다 먼저 맞히면 1점, 틀리면 AI 1점. <b>10문제</b>, AI는 갈수록 빨라져요. 키보드 1~4도 돼요.</p>
+      <div class="score">
+        <div class="me"><div class="who">도전자</div><div class="n" id="c-me">0</div></div>
+        <div class="mid" id="c-round">0 / 10</div>
+        <div class="ai"><div class="who">AI</div><div class="n" id="c-ai">0</div></div>
+      </div>
+      <div class="qbar" aria-hidden="true"><i id="qbar"></i></div>
+      <div class="stroop"><div class="word idle" id="word">아래 버튼을 눌러 시작</div></div>
+      <div class="answers" id="answers"></div>
+      <div class="status" id="c-status"></div>
+      <div class="row"><button class="btn primary" id="c-start">시작</button></div>
+    </div>
+    <aside class="card brain">
+      <div class="brain-head"><div class="face" id="f3"><i></i></div><div><h3>ZERO의 반응 기록</h3><p class="mood" id="mood3">색상 인식 대기</p></div></div>
+      <ul class="log" id="log3"></ul>
+      <p class="learn"><b>왜 어려울까요?</b> 사람의 뇌는 글자를 자동으로 읽어 버려서, 뜻과 색이 다르면 헷갈려요(스트룹 효과). AI는 글자를 읽지 않고 색깔 값만 보기 때문에 속지 않아요.</p>
+    </aside>
+  </section>
+
+  <section class="card">
+    <div class="board-foot">
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>부스 기록</th><th>도전자 승</th><th>AI 승</th><th>무승부</th><th>인간 승률</th></tr></thead>
+          <tbody id="tally"></tbody>
+        </table>
+      </div>
+      <div class="row" style="flex-direction:column;align-items:flex-start">
+        <p class="foot-note">이 기기에 기록이 쌓여요. 부스 운영이 끝나면 초기화하세요.</p>
+        <button class="btn" id="wipe">기록 초기화</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="scene" id="scene" role="dialog" aria-modal="true" aria-label="AI 로봇 ZERO의 도발" hidden>
+  <button class="scene-skip" id="scene-skip">건너뛰기 ✕</button>
+  <div class="scene-tag" id="scene-tag"></div>
+  <svg class="robot" id="robot" viewBox="0 0 200 230" aria-hidden="true">
+    <line x1="100" y1="34" x2="100" y2="14" stroke="var(--ink)" stroke-width="4" stroke-linecap="round"/>
+    <circle class="bulb" cx="100" cy="11" r="7" fill="var(--human)"/>
+    <rect x="18" y="66" width="16" height="42" rx="6" fill="var(--ink)"/>
+    <rect x="166" y="66" width="16" height="42" rx="6" fill="var(--ink)"/>
+    <rect x="30" y="32" width="140" height="112" rx="26" fill="var(--ai)"/>
+    <rect x="46" y="52" width="108" height="58" rx="18" fill="var(--visor)"/>
+    <rect class="brow l" x="62" y="59" width="30" height="6" rx="3" fill="var(--eye)"/>
+    <rect class="brow r" x="108" y="59" width="30" height="6" rx="3" fill="var(--eye)"/>
+    <circle class="eye" cx="78" cy="85" r="11" fill="var(--eye)"/>
+    <circle class="eye" cx="122" cy="85" r="11" fill="var(--eye)"/>
+    <rect class="mouth" x="78" y="122" width="44" height="7" rx="3.5" fill="var(--visor)"/>
+    <rect x="88" y="144" width="24" height="12" fill="var(--ink)"/>
+    <rect x="16" y="160" width="16" height="50" rx="8" fill="var(--ai)"/>
+    <rect x="40" y="154" width="120" height="68" rx="20" fill="var(--ai)"/>
+    <rect x="76" y="171" width="48" height="32" rx="8" fill="var(--visor)"/>
+    <text x="100" y="193" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="14" font-weight="500" fill="var(--eye)">ZERO</text>
+    <rect class="arm" x="168" y="160" width="16" height="50" rx="8" fill="var(--ai)"/>
+  </svg>
+  <div class="bubble"><span class="who">ZERO</span><span id="say" aria-live="polite"></span></div>
+  <div class="scene-actions"><span class="scene-hint" id="scene-hint">화면을 누르면 계속 ▸</span><button class="btn primary" id="scene-btn" hidden>도전한다!</button></div>
+</div>
+
+<script>
+(()=>{
+const $=s=>document.querySelector(s);
+const wait=ms=>new Promise(r=>setTimeout(r,ms));
+const rand=(a,b)=>a+Math.random()*(b-a);
+const sec=ms=>(ms/1000).toFixed(3)+'초';
+const store={get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+const blank=()=>({1:{h:0,a:0,d:0},2:{h:0,a:0,d:0},3:{h:0,a:0,d:0}});
+let tally=store.get('beatai-speed-tally',blank());
+const NAMES={1:'Stage 1 반응속도',2:'Stage 2 표적 사냥',3:'Stage 3 색깔 함정'};
+function renderTally(){$('#tally').innerHTML=[1,2,3].map(s=>{const t=tally[s];const n=t.h+t.a+t.d;
+  return `<tr><td>${NAMES[s]}</td><td class="h">${t.h}</td><td class="a">${t.a}</td><td>${t.d}</td><td>${n?Math.round(t.h/n*100)+'%':'–'}</td></tr>`}).join('')}
+function record(s,res){tally[s][res]++;store.set('beatai-speed-tally',tally);renderTally()}
+renderTally();
+let wipeArm=false;
+$('#wipe').onclick=()=>{const b=$('#wipe');
+  if(!wipeArm){wipeArm=true;b.textContent='정말 지울까요? 한 번 더 누르세요';setTimeout(()=>{wipeArm=false;b.textContent='기록 초기화'},3000);return}
+  tally=blank();store.set('beatai-speed-tally',tally);renderTally();wipeArm=false;b.textContent='초기화했어요';setTimeout(()=>b.textContent='기록 초기화',1500)};
+function log(s,text,cls='ai'){const ul=$('#log'+s);const li=document.createElement('li');li.className=cls;li.textContent=text;ul.prepend(li);while(ul.children.length>30)ul.lastChild.remove()}
+function face(s,state,mood){$('#f'+s).className='face'+(state?' '+state:'');if(mood)$('#mood'+s).textContent=mood}
+
+/* ---------- Robot taunt scene ---------- */
+const scene=$('#scene'),say=$('#say'),robot=$('#robot');
+const SC={lines:[],i:0,typing:false,timer:null,onDone:null};
+function introLines(){const hw=tally[3].h;return[
+  {m:'',t:'삐빅. 인간 한 명 감지.'},
+  {m:'smug',t:'나는 AI 로봇 ZERO. 지치지도 않고, 졸지도 않고, 실수도 안 하지.'},
+  {m:'smug',t:hw?`최종 단계까지 나를 이긴 인간은 ${hw}명뿐. 그것도 운이었어.`:'아직 최종 단계에서 나를 이긴 인간은 한 명도 없어.'},
+  {m:'angry',t:'손가락 하나로 기계를 이길 수 있다고 생각해? 증명해 봐.'},
+  {m:'smug',t:'첫 시험은 반응속도. 초록색이 되면 누르기만 하면 돼. 쉽지? 그래도 넌 질걸.'}]}
+const STAGE_LINES={
+  2:[{m:'',t:'반응속도 좀 하네? 그건 몸풀기였어.'},
+     {m:'smug',t:'이번엔 내 커서랑 경주야. 표적 10개, 누가 더 많이 잡나 보자.'},
+     {m:'angry',t:'내 커서는 표적을 0.5초 만에 찾아가. 따라올 수 있으면 따라와 봐.'}],
+  3:[{m:'shock',t:'…여기까지 왔다고? 계산에 없던 일인데.'},
+     {m:'angry',t:'마지막 시험. 글자의 뜻 말고, 글자가 칠해진 색깔을 골라.'},
+     {m:'smug',t:'인간 뇌는 글자를 자동으로 읽어 버려서 헷갈리지. 나는 색만 봐. 이번엔 절대 못 이겨.'}]};
+const STAGE_TAG={2:'Stage 2 · 표적 사냥',3:'Stage 3 · 색깔 함정'};
+const RESULT={
+  1:{h:[{m:'shock',t:'뭐? 내 회로가 느렸다고?'},{m:'angry',t:'방금 건 워밍업이었어. 다음 시험에서 보자.'}],
+     a:[{m:'smug',t:'역시 인간. 0.1초가 그렇게 길어? 다시 해 봐, 결과는 같겠지만.'}]},
+  2:{h:[{m:'shock',t:'표적을 나보다 먼저…?'},{m:'angry',t:'좋아, 마지막 시험에서 끝내 주지.'}],
+     a:[{m:'smug',t:'내 커서가 더 빨랐지. 손가락 운동 좀 하고 와.'}],
+     d:[{m:'angry',t:'무승부? 그런 건 인정 못 해. 다시 붙자!'}]},
+  3:{h:[{m:'sad',t:'…인정할게. 오늘은 인간이 이겼어.'},{m:'',t:'다음 도전자는 이렇게 쉽게 안 봐줄 거야. 삐빅.'}],
+     a:[{m:'smug',t:'봤지? 글자에 속았잖아. 그게 인간 뇌의 한계야.'}],
+     d:[{m:'angry',t:'무승부? 그런 건 인정 못 해. 다시 붙자!'}]}};
+function sceneOpen(lines,{tag='',btn='도전한다!',onDone=null}={}){
+  clearInterval(SC.timer);Object.assign(SC,{lines,i:0,onDone});$('#scene-tag').textContent=tag;$('#scene-btn').textContent=btn;
+  scene.hidden=false;document.body.style.overflow='hidden';sceneLine()}
+function sceneLine(){const L=SC.lines[SC.i];robot.setAttribute('class','robot talk'+(L.m?' '+L.m:''));
+  $('#scene-btn').hidden=true;$('#scene-hint').hidden=false;say.textContent='';SC.typing=true;
+  let reduce=false;try{reduce=matchMedia('(prefers-reduced-motion: reduce)').matches}catch(e){}
+  if(reduce)return sceneTyped();
+  let k=0;SC.timer=setInterval(()=>{k++;say.textContent=L.t.slice(0,k);if(k>=L.t.length)sceneTyped()},40)}
+function sceneTyped(){clearInterval(SC.timer);SC.typing=false;say.textContent=SC.lines[SC.i].t;robot.classList.remove('talk');
+  const last=SC.i>=SC.lines.length-1;$('#scene-hint').hidden=last;const b=$('#scene-btn');b.hidden=!last;if(last)b.focus({preventScroll:true})}
+function sceneAdvance(){if(SC.typing)return sceneTyped();if(SC.i<SC.lines.length-1){SC.i++;sceneLine()}else sceneClose()}
+function sceneClose(){clearInterval(SC.timer);scene.hidden=true;document.body.style.overflow='';const f=SC.onDone;SC.onDone=null;if(f)f()}
+scene.addEventListener('click',e=>{if(e.target.closest('button'))return;if(!SC.typing&&SC.i>=SC.lines.length-1)return;sceneAdvance()});
+$('#scene-btn').onclick=sceneClose;$('#scene-skip').onclick=sceneClose;
+let resultTimer=null;
+function later(f,ms){clearTimeout(resultTimer);resultTimer=setTimeout(f,ms)}
+function robotResult(s,res){const lines=RESULT[s][res]||RESULT[s].a;let btn,cb;
+  if(res==='h'){if(s<3){btn=`Stage ${s+1} 도전 →`;cb=()=>show(s+1)}else{btn='다음 도전자 받기';cb=newChallenger}}
+  else{btn='다시 도전';cb=s===1?aReset:s===2?bStart:cStart}
+  sceneOpen(lines,{tag:res==='h'?'인간 승리':res==='a'?'AI 승리':'무승부',btn,onDone:cb})}
+
+let current='1';const seen={};
+function show(s,taunt=true){s=String(s);current=s;document.querySelectorAll('.tab').forEach(t=>t.setAttribute('aria-selected',t.dataset.stage===s));
+  [1,2,3].forEach(i=>$('#s'+i).hidden=String(i)!==s);stopAll();
+  if(taunt&&s!=='1'&&!seen[s]){seen[s]=true;sceneOpen(STAGE_LINES[s],{tag:STAGE_TAG[s],btn:'덤벼 봐!'})}}
+function newChallenger(){clearTimeout(resultTimer);show('1',false);aReset();bStop();Object.assign(B,{me:0,ai:0,n:0});bScore();
+  $('#b-status').textContent='';$('#b-status').className='status';$('#b-next').hidden=true;
+  cStop();Object.assign(C,{me:0,ai:0,n:0});cScore();Object.keys(seen).forEach(k=>delete seen[k]);
+  sceneOpen(introLines(),{tag:'새 도전자 입장',btn:'도전한다!'})}
+document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>show(t.dataset.stage));
+
+/* ---------- STAGE 1: reaction ---------- */
+const A={me:0,ai:0,round:0,phase:'idle',t0:0,aiT:0,timers:[],over:false};
+const pad=$('#pad');
+function padSet(cls,big,small){pad.className='pad'+(cls?' '+cls:'');pad.innerHTML=`<span class="big">${big}</span><span class="small">${small}</span>`}
+function aClear(){A.timers.forEach(clearTimeout);A.timers=[]}
+function aScore(){$('#a-me').textContent=A.me;$('#a-ai').textContent=A.ai;$('#a-round').textContent=A.round?`${A.round}판째`:'3판 2선승'}
+function aStart(){if(A.over)return;A.phase='wait';A.round++;aScore();padSet('wait','기다려…','초록색이 되면 누르세요');face(1,'think','신호 감시 중');
+  $('#t-me').textContent='–';$('#t-ai').textContent='–';
+  A.timers.push(setTimeout(()=>{A.phase='go';A.t0=performance.now();A.aiT=rand(330,450);padSet('go','지금!','눌러요!');
+    A.timers.push(setTimeout(()=>{if(A.phase!=='go')return;A.phase='result';A.ai++;$('#t-ai').textContent=sec(A.aiT);$('#t-me').textContent='못 누름';
+      padSet('','AI가 먼저!',`AI ${sec(A.aiT)} · 다음 판은 눌러서 시작`);face(1,'happy','신호 포착!');log(1,`신호 감지 → ${sec(A.aiT)} 만에 반응`);aCheck()},A.aiT))},rand(1500,3800)))}
+function aHit(){
+  if(A.over)return;
+  if(A.phase==='idle'||A.phase==='result')return aStart();
+  if(A.phase==='wait'){aClear();A.phase='result';A.ai++;padSet('foul','부정출발!','초록색 전에 눌렀어요 · 눌러서 다음 판');face(1,'happy','성급했네요');log(1,'도전자 부정출발 → AI 1점','oops');aCheck();return}
+  if(A.phase==='go'){const t=performance.now()-A.t0;aClear();A.phase='result';A.me++;$('#t-me').textContent=sec(t);$('#t-ai').textContent=sec(A.aiT);
+    padSet('','당신이 먼저!',`${sec(t)} · 눌러서 다음 판`);face(1,'sad','졌다…');log(1,`도전자 ${sec(t)} < AI ${sec(A.aiT)}`,'me');aCheck()}}
+function aCheck(){aScore();if(A.me<2&&A.ai<2)return;A.over=true;
+  if(A.me>=2){padSet('go','승리! 🎉',`${A.me} : ${A.ai} · 사람의 반사신경이 이겼어요`);face(1,'sad','인간 반사신경 인정');record(1,'h');$('#a-next').hidden=false}
+  else{padSet('','AI 승리',`${A.me} : ${A.ai} · 처음부터 눌러 다시 도전`);face(1,'happy','제가 빨랐어요');record(1,'a')}
+  later(()=>robotResult(1,A.me>=2?'h':'a'),1100)}
+function aReset(){aClear();Object.assign(A,{me:0,ai:0,round:0,phase:'idle',over:false});aScore();padSet('','시작','눌러서 시작');
+  $('#t-me').textContent='–';$('#t-ai').textContent='–';$('#a-next').hidden=true;$('#log1').innerHTML='';face(1,'','신호 대기 중');log(1,'새 도전자 입장! 제 반응속도는 0.33~0.45초예요.')}
+pad.addEventListener('pointerdown',e=>{e.preventDefault();aHit()});
+pad.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();aHit()}});
+$('#a-reset').onclick=aReset;$('#a-next').onclick=()=>show(2);aReset();
+
+/* ---------- STAGE 2: target race ---------- */
+const B={me:0,ai:0,n:0,total:10,live:false,timers:[],target:null,cx:30,cy:30};
+const arena=$('#arena'),cur=$('#cursor');
+function bClear(){B.timers.forEach(clearTimeout);B.timers=[];if(B.target){B.target.remove();B.target=null}}
+function bScore(){$('#b-me').textContent=B.me;$('#b-ai').textContent=B.ai;$('#b-round').textContent=`${B.n} / ${B.total}`}
+function moveCursor(x,y,ms){cur.style.transitionDuration=ms+'ms';cur.style.transform=`translate(${x}px,${y}px)`;B.cx=x;B.cy=y}
+function popText(x,y,txt,color){const p=document.createElement('div');p.className='pop';p.style.left=x+'px';p.style.top=y+'px';p.style.color=color;p.textContent=txt;arena.append(p);setTimeout(()=>p.remove(),700)}
+function bSpawn(){if(!B.live)return;if(B.n>=B.total)return bEnd();
+  const r=arena.getBoundingClientRect();const x=rand(40,r.width-40),y=rand(40,r.height-40);
+  const t=document.createElement('button');t.className='target';t.style.left=x+'px';t.style.top=y+'px';t.setAttribute('aria-label','표적');
+  B.target=t;arena.append(t);B.n++;bScore();const born=performance.now();
+  const think=rand(170,260),travel=rand(300,420);const total=think+travel;
+  face(2,'think','표적 발견');
+  B.timers.push(setTimeout(()=>moveCursor(x,y,travel),think));
+  B.timers.push(setTimeout(()=>{if(B.target!==t)return;B.target=null;t.classList.add('taken');B.ai++;bScore();popText(x,y,'AI!','var(--ai)');face(2,'happy','잡았다!');
+    log(2,`#${B.n} 인식 ${Math.round(think)}ms + 이동 ${Math.round(travel)}ms → AI 획득`);setTimeout(()=>t.remove(),250);B.timers.push(setTimeout(bSpawn,rand(450,800)))},total));
+  t.addEventListener('pointerdown',e=>{e.preventDefault();if(B.target!==t)return;const ms=performance.now()-born;B.target=null;B.timers.forEach(clearTimeout);B.timers=[];
+    B.me++;bScore();popText(x,y,Math.round(ms)+'ms','var(--human)');t.remove();face(2,'sad','놓쳤다…');log(2,`#${B.n} 도전자 ${Math.round(ms)}ms로 먼저 터치`,'me');
+    B.timers.push(setTimeout(bSpawn,rand(450,800)))})}
+function bEnd(){B.live=false;$('#b-start').textContent='다시 하기';$('#b-start').disabled=false;const st=$('#b-status');
+  if(B.me>B.ai){st.textContent=`${B.me} : ${B.ai} 승리! AI 커서보다 빨랐어요 🎉`;st.className='status win';face(2,'sad','인간 손 빠르다…');record(2,'h');$('#b-next').hidden=false;$('#b-msg').textContent='승리!'}
+  else if(B.me<B.ai){st.textContent=`${B.me} : ${B.ai} AI 승리. 다시 도전!`;st.className='status lose';face(2,'happy','제가 더 빨랐어요');record(2,'a');$('#b-msg').textContent='AI 승리'}
+  else{st.textContent=`${B.me} : ${B.ai} 무승부!`;st.className='status';face(2,'','막상막하');record(2,'d');$('#b-msg').textContent='무승부'}
+  $('#b-msg').hidden=false;later(()=>robotResult(2,B.me>B.ai?'h':B.me<B.ai?'a':'d'),1100)}
+async function bStart(){bClear();Object.assign(B,{me:0,ai:0,n:0,live:true});bScore();$('#b-status').textContent='';$('#b-status').className='status';$('#b-next').hidden=true;
+  $('#b-start').disabled=true;$('#log2').innerHTML='';log(2,'표적 10개, 준비!');const m=$('#b-msg');m.hidden=false;
+  for(const c of ['3','2','1']){if(!B.live)return;m.textContent=c;await wait(550)}if(!B.live)return;m.hidden=true;bSpawn()}
+function bStop(){B.live=false;bClear();$('#b-start').disabled=false;$('#b-start').textContent='시작';$('#b-msg').hidden=false;$('#b-msg').textContent='아래 버튼을 눌러 시작'}
+$('#b-start').onclick=bStart;$('#b-next').onclick=()=>show(3);moveCursor(30,30,0);face(2,'','표적 탐색 대기');log(2,'제 커서는 0.5~0.7초면 표적에 도착해요.');
+
+/* ---------- STAGE 3: color trap (Stroop) ---------- */
+const COLORS=[{n:'빨강',v:'--c-red'},{n:'파랑',v:'--c-blue'},{n:'초록',v:'--c-green'},{n:'노랑',v:'--c-yellow'}];
+const C={me:0,ai:0,n:0,total:10,live:false,ink:-1,open:false,timers:[],t0:0};
+const ans=$('#answers');
+COLORS.forEach((c,i)=>{const b=document.createElement('button');b.className='ans';b.innerHTML=`${c.n}<kbd>${i+1}</kbd>`;b.disabled=true;b.addEventListener('pointerdown',e=>{e.preventDefault();cAnswer(i)});b.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();cAnswer(i)}});ans.append(b)});
+function cClear(){C.timers.forEach(clearTimeout);C.timers=[]}
+function cScore(){$('#c-me').textContent=C.me;$('#c-ai').textContent=C.ai;$('#c-round').textContent=`${C.n} / ${C.total}`}
+function bar(ms){const q=$('#qbar');q.style.transition='none';q.style.width='0';void q.offsetWidth;if(ms){q.style.transition=`width ${ms}ms linear`;q.style.width='100%'}}
+function lockAns(on){[...ans.children].forEach(b=>{b.disabled=on;b.classList.remove('right','wrong')})}
+function cNext(){if(!C.live)return;if(C.n>=C.total)return cEnd();C.n++;cScore();
+  const w=Math.floor(Math.random()*4);let ink=w;if(Math.random()<0.8){while(ink===w)ink=Math.floor(Math.random()*4)}
+  C.ink=ink;const word=$('#word');word.className='word';word.textContent=COLORS[w].n;word.style.color=`var(${COLORS[ink].v})`;
+  lockAns(false);C.open=true;C.t0=performance.now();face(3,'think','색상값 분석 중');
+  const aiT=Math.max(560,rand(780,940)-(C.n-1)*25);bar(aiT);
+  C.timers.push(setTimeout(()=>{if(!C.open)return;C.open=false;C.ai++;cScore();lockAns(true);ans.children[ink].classList.add('right');
+    $('#c-status').textContent=`AI가 먼저 "${COLORS[ink].n}"을 골랐어요`;$('#c-status').className='status lose';face(3,'happy','정답!');
+    log(3,`#${C.n} 글자 "${COLORS[w].n}" 무시, 색상값=${COLORS[ink].n} → ${Math.round(aiT)}ms`);C.timers.push(setTimeout(cNext,850))},aiT))}
+function cAnswer(i){if(!C.open)return;C.open=false;cClear();bar(0);const ms=Math.round(performance.now()-C.t0);lockAns(true);const st=$('#c-status');
+  if(i===C.ink){C.me++;ans.children[i].classList.add('right');st.textContent=`정답! ${ms}ms`;st.className='status win';face(3,'sad','빨랐어요…');log(3,`#${C.n} 도전자 ${ms}ms 정답`,'me')}
+  else{C.ai++;ans.children[i].classList.add('wrong');ans.children[C.ink].classList.add('right');st.textContent=`함정! 글자 색은 ${COLORS[C.ink].n}이었어요`;st.className='status lose';face(3,'happy','속았군요');log(3,`#${C.n} 도전자 오답 (${COLORS[i].n}) → AI 1점`,'oops')}
+  cScore();C.timers.push(setTimeout(cNext,850))}
+function cEnd(){C.live=false;const word=$('#word');word.className='word idle';word.style.color='';const st=$('#c-status');$('#c-start').disabled=false;$('#c-start').textContent='다시 하기';bar(0);
+  if(C.me>C.ai){word.textContent='최종 단계 클리어 🏆';st.textContent=`${C.me} : ${C.ai} 승리! 스트룹 효과를 이겨냈어요`;st.className='status win';face(3,'sad','인간 대표 인정');record(3,'h')}
+  else if(C.me<C.ai){word.textContent='AI 승리';st.textContent=`${C.me} : ${C.ai} 글자를 읽지 말고 색만 보세요!`;st.className='status lose';face(3,'happy','제 눈은 속지 않아요');record(3,'a')}
+  else{word.textContent='무승부';st.textContent=`${C.me} : ${C.ai} 막상막하!`;st.className='status';face(3,'','무승부');record(3,'d')}
+  later(()=>robotResult(3,C.me>C.ai?'h':C.me<C.ai?'a':'d'),1100)}
+async function cStart(){cClear();Object.assign(C,{me:0,ai:0,n:0,live:true,open:false});cScore();$('#c-start').disabled=true;$('#c-status').textContent='';$('#c-status').className='status';
+  $('#log3').innerHTML='';log(3,'저는 글자를 읽지 않고 색깔 값만 봐요.');const word=$('#word');word.className='word';word.style.color='';
+  for(const c of ['3','2','1']){if(!C.live)return;word.textContent=c;await wait(550)}cNext()}
+function cStop(){C.live=false;C.open=false;cClear();bar(0);lockAns(true);const w=$('#word');w.className='word idle';w.style.color='';w.textContent='아래 버튼을 눌러 시작';$('#c-start').disabled=false;$('#c-start').textContent='시작';$('#c-status').textContent=''}
+$('#c-start').onclick=cStart;face(3,'','색상 인식 대기');
+
+document.addEventListener('keydown',e=>{
+  if(!scene.hidden){if(e.key===' '||e.key==='Enter'){e.preventDefault();sceneAdvance()}return}
+  if(current==='1'&&e.code==='Space'){e.preventDefault();aHit()}
+  if(current==='3'&&['1','2','3','4'].includes(e.key))cAnswer(+e.key-1)});
+
+function stopAll(){if(A.phase==='wait'||A.phase==='go'){aClear();A.phase='idle';if(!A.over){A.round=Math.max(0,A.round-1);aScore();padSet('','시작','눌러서 시작')}}
+  if(B.live)bStop();if(C.live)cStop()}
+$('#newbie').onclick=newChallenger;
+newChallenger();
+})();
+</script>
+</body>
+</html>
